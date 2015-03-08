@@ -5,18 +5,20 @@ import std.conv;
 
 import deimos.glfw.glfw3;
 import derelict.opengl3.gl3;
+import gl3n.linalg;
 
 
 string vertex_source = q{
 
     #version 330 core
 
-    layout(location = 0) in vec3 vertexPosition_modelspace;
+    in vec3 pos;
+    uniform mat4 mvp;
+
 
     void main() {
-        gl_Position.xyz = vertexPosition_modelspace;
-        gl_Position.w = 1.0;
-
+        vec4 v = vec4(pos, 1);
+        gl_Position = mvp * v;
     }
 };
 
@@ -28,7 +30,7 @@ string fragment_source = q{
     out vec3 color;
 
     void main() {
-        color = vec3(0,1,1);
+        color = vec3(0, 1, 1);
     }
 };
 
@@ -57,8 +59,6 @@ GLFWwindow* awkward_init() {
     glfwSetInputMode(window, GLFW_STICKY_KEYS, true);
 
     DerelictGL3.reload();
-
-
 
     return window;
 }
@@ -105,6 +105,10 @@ uint load_shaders(string vertex_code, string fragment_code) {
     return program_id;
 }
 
+void check_error(int line=__LINE__)() {
+    auto error = glGetError();
+    enforce(error == GL_NO_ERROR, "error before line %s: 0x%x".format(line,  error));
+}
 
 void main()
 {
@@ -118,12 +122,44 @@ void main()
     glGenVertexArrays(1, &vertex_array_id);
     glBindVertexArray(vertex_array_id);
 
-
     float[] vertex_buffer_data = [
-        -1, -1, 0,
-        1, -1, 0,
-        0,  1, 0
-    ];
+    -1.0f, -1.0f, -1.0f, // triangle 1 : begin
+    -1.0f, -1.0f, 1.0f,
+    -1.0f, 1.0f, 1.0f, // triangle 1 : end
+    1.0f, 1.0f, -1.0f, // triangle 2 : begin
+    -1.0f, -1.0f, -1.0f,
+    -1.0f, 1.0f, -1.0f, // triangle 2 : end
+    1.0f, -1.0f, 1.0f,
+    -1.0f, -1.0f, -1.0f,
+    1.0f, -1.0f, -1.0f,
+    1.0f, 1.0f, -1.0f,
+    1.0f, -1.0f, -1.0f,
+    -1.0f, -1.0f, -1.0f,
+    -1.0f, -1.0f, -1.0f,
+    -1.0f, 1.0f, 1.0f,
+    -1.0f, 1.0f, -1.0f,
+    1.0f, -1.0f, 1.0f,
+    -1.0f, -1.0f, 1.0f,
+    -1.0f, -1.0f, -1.0f,
+    -1.0f, 1.0f, 1.0f,
+    -1.0f, -1.0f, 1.0f,
+    1.0f, -1.0f, 1.0f,
+    1.0f, 1.0f, 1.0f,
+    1.0f, -1.0f, -1.0f,
+    1.0f, 1.0f, -1.0f,
+    1.0f, -1.0f, -1.0f,
+    1.0f, 1.0f, 1.0f,
+    1.0f, -1.0f, 1.0f,
+    1.0f, 1.0f, 1.0f,
+    1.0f, 1.0f, -1.0f,
+    -1.0f, 1.0f, -1.0f,
+    1.0f, 1.0f, 1.0f,
+    -1.0f, 1.0f, -1.0f,
+    -1.0f, 1.0f, 1.0f,
+    1.0f, 1.0f, 1.0f,
+    -1.0f, 1.0f, 1.0f,
+    1.0f, -1.0f, 1.0f
+             ];
 
     uint vertex_buffer_id;
 
@@ -134,18 +170,24 @@ void main()
             vertex_buffer_data.ptr,
             GL_STATIC_DRAW);
 
+    auto projection = mat4.perspective(1024, 768, 90, 0.01, 100);
+    auto view = mat4.look_at(vec3(4, 3, 3), vec3(0, 0, 0), vec3(0, 1, 0));
+    auto model = mat4.identity;
+    auto mvp = projection * view * model;
+
     auto program_id = load_shaders(vertex_source, fragment_source);
 
-    while (!glfwWindowShouldClose(window)) {
+    uint mvp_id = glGetUniformLocation(program_id, "mvp");
 
+    while (!glfwWindowShouldClose(window)) {
         glEnableVertexAttribArray(0);
 
         glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_id);
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, null);
 
         glUseProgram(program_id);
-
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glUniformMatrix4fv(mvp_id, 1, false, mvp.value_ptr);
+        glDrawArrays(GL_TRIANGLES, 0, to!int(vertex_buffer_data.length / 3));
 
         glDisableVertexAttribArray(0);
 
