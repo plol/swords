@@ -1,8 +1,11 @@
 {
-	"name": "swords",
-	"description": "A minimal D application.",
-	"copyright": "Copyright © 2015, plol",
-	"authors": ["plol"],
-	"dependencies": {
-	}
+    "name": "swords",
+    "description": "A minimal D application.",
+    "copyright": "Copyright © 2015, plol",
+    "authors": ["plol"],
+    "debugMode": true,
+    "dependencies": {
+        "glfw-drey": "~>0.0.4",
+        "derelict-gl3": "~>1.0.12"
+    }
 }
