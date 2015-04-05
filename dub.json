@@ -7,6 +7,7 @@
     "dependencies": {
         "glfw-drey": "~>0.0.4",
         "derelict-gl3": "~>1.0.12",
-        "gl3n": "~>1.0.1"
+        "gl3n": "~>1.0.1",
+        "imageformats": "~>3.0.5"
     }
 }
