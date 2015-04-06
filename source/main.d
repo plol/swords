@@ -14,10 +14,11 @@ string vertex_source = q{
     #version 330 core
 
     in vec3 pos;
-    uniform mat4 mvp;
-    out vec3 wat;
-
     in vec2 UV_in;
+
+    uniform mat4 mvp;
+
+    out vec3 wat;
     out vec2 UV;
 
     void main() {
@@ -40,7 +41,7 @@ string fragment_source = q{
     uniform sampler2D myTextureSampler;
 
     void main() {
-        color = texture2D(myTextureSampler, wat.xy).rgb;
+        color = texture2D(myTextureSampler, vec2(wat.x, -wat.y)).rgb;
     }
 };
 
@@ -154,24 +155,32 @@ uint load_texture_from_file(string filename) {
     return texture_id;
 }
 
-uint generate_buffer_with_data(const float[] data) {
-    uint buffer_id;
-    glGenBuffers(1, &buffer_id);
-    glBindBuffer(GL_ARRAY_BUFFER, buffer_id);
-    glBufferData(GL_ARRAY_BUFFER, float.sizeof * data.length, data.ptr,
-            GL_STATIC_DRAW);
-    return buffer_id;
-}
-
-
-void bind_buffer_to_vertex_attrib_thing(uint buffer_id, int num_per_thing, uint vertex_attrib_thing) {
-    glBindBuffer(GL_ARRAY_BUFFER, buffer_id);
-    glVertexAttribPointer(vertex_attrib_thing, num_per_thing, GL_FLOAT, GL_FALSE, 0, null);
-}
-
 void bind_texture_to_port_thing(uint texture_id, uint port) {
     glActiveTexture(GL_TEXTURE0 + port);
     glBindTexture(GL_TEXTURE_2D, texture_id);
+}
+
+struct Buffer(T) {
+    uint id;
+    int num_objects;
+
+    void upload(const T[] data) {
+        num_objects = to!int(data.length);
+
+        glBindBuffer(GL_ARRAY_BUFFER, id);
+        glBufferData(GL_ARRAY_BUFFER, T.sizeof * data.length, data.ptr,
+                GL_STATIC_DRAW);
+    }
+    void bind_to_vertex_attrib(int vertex_attrib) {
+        glBindBuffer(GL_ARRAY_BUFFER, id);
+        glVertexAttribPointer(vertex_attrib, T.sizeof / float.sizeof, GL_FLOAT,
+                GL_FALSE, 0, null); }
+}
+
+Buffer!T create_buffer(T)() {
+    uint id;
+    glGenBuffers(1, &id);
+    return Buffer!T(id);
 }
 
 struct Uniform(T) {
@@ -187,8 +196,7 @@ struct Uniform(T) {
 
 
 Uniform!T create_uniform(T)(uint program_id, string name) {
-    uint id = glGetUniformLocation(program_id, name.toStringz);
-    return Uniform!T(id);
+    return Uniform!T(glGetUniformLocation(program_id, name.toStringz));
 }
 
 
@@ -203,90 +211,88 @@ void main()
     auto window = awkward_init();
 
 
-    float[] vertex_buffer_data = [
-        -1.0f, -1.0f, -1.0f, // triangle 1 : begin
-        -1.0f, -1.0f, 1.0f,
-        -1.0f, 1.0f, 1.0f, // triangle 1 : end
-        1.0f, 1.0f, -1.0f, // triangle 2 : begin
-        -1.0f, -1.0f, -1.0f,
-        -1.0f, 1.0f, -1.0f, // triangle 2 : end
-        1.0f, -1.0f, 1.0f,
-        -1.0f, -1.0f, -1.0f,
-        1.0f, -1.0f, -1.0f,
-        1.0f, 1.0f, -1.0f,
-        1.0f, -1.0f, -1.0f,
-        -1.0f, -1.0f, -1.0f,
-        -1.0f, -1.0f, -1.0f,
-        -1.0f, 1.0f, 1.0f,
-        -1.0f, 1.0f, -1.0f,
-        1.0f, -1.0f, 1.0f,
-        -1.0f, -1.0f, 1.0f,
-        -1.0f, -1.0f, -1.0f,
-        -1.0f, 1.0f, 1.0f,
-        -1.0f, -1.0f, 1.0f,
-        1.0f, -1.0f, 1.0f,
-        1.0f, 1.0f, 1.0f,
-        1.0f, -1.0f, -1.0f,
-        1.0f, 1.0f, -1.0f,
-        1.0f, -1.0f, -1.0f,
-        1.0f, 1.0f, 1.0f,
-        1.0f, -1.0f, 1.0f,
-        1.0f, 1.0f, 1.0f,
-        1.0f, 1.0f, -1.0f,
-        -1.0f, 1.0f, -1.0f,
-        1.0f, 1.0f, 1.0f,
-        -1.0f, 1.0f, -1.0f,
-        -1.0f, 1.0f, 1.0f,
-        1.0f, 1.0f, 1.0f,
-        -1.0f, 1.0f, 1.0f,
-        1.0f, -1.0f, 1.0f
+    vec3[] vertex_buffer_data = [
+        vec3(-1.0f, -1.0f, -1.0f), // triangle 1 : begin
+        vec3(-1.0f, -1.0f, 1.0f),
+        vec3(-1.0f, 1.0f, 1.0f), // triangle 1 : end
+        vec3(1.0f, 1.0f, -1.0f), // triangle 2 : begin
+        vec3(-1.0f, -1.0f, -1.0f),
+        vec3(-1.0f, 1.0f, -1.0f), // triangle 2 : end
+        vec3(1.0f, -1.0f, 1.0f),
+        vec3(-1.0f, -1.0f, -1.0f),
+        vec3(1.0f, -1.0f, -1.0f),
+        vec3(1.0f, 1.0f, -1.0f),
+        vec3(1.0f, -1.0f, -1.0f),
+        vec3(-1.0f, -1.0f, -1.0f),
+        vec3(-1.0f, -1.0f, -1.0f),
+        vec3(-1.0f, 1.0f, 1.0f),
+        vec3(-1.0f, 1.0f, -1.0f),
+        vec3(1.0f, -1.0f, 1.0f),
+        vec3(-1.0f, -1.0f, 1.0f),
+        vec3(-1.0f, -1.0f, -1.0f),
+        vec3(-1.0f, 1.0f, 1.0f),
+        vec3(-1.0f, -1.0f, 1.0f),
+        vec3(1.0f, -1.0f, 1.0f),
+        vec3(1.0f, 1.0f, 1.0f),
+        vec3(1.0f, -1.0f, -1.0f),
+        vec3(1.0f, 1.0f, -1.0f),
+        vec3(1.0f, -1.0f, -1.0f),
+        vec3(1.0f, 1.0f, 1.0f),
+        vec3(1.0f, -1.0f, 1.0f),
+        vec3(1.0f, 1.0f, 1.0f),
+        vec3(1.0f, 1.0f, -1.0f),
+        vec3(-1.0f, 1.0f, -1.0f),
+        vec3(1.0f, 1.0f, 1.0f),
+        vec3(-1.0f, 1.0f, -1.0f),
+        vec3(-1.0f, 1.0f, 1.0f),
+        vec3(1.0f, 1.0f, 1.0f),
+        vec3(-1.0f, 1.0f, 1.0f),
+        vec3(1.0f, -1.0f, 1.0f)
             ];
-    float[] g_uv_buffer_data = [
-        0.000059f, 1.0f-0.000004f,
-        0.000103f, 1.0f-0.336048f,
-        0.335973f, 1.0f-0.335903f,
-        1.000023f, 1.0f-0.000013f,
-        0.667979f, 1.0f-0.335851f,
-        0.999958f, 1.0f-0.336064f,
-        0.667979f, 1.0f-0.335851f,
-        0.336024f, 1.0f-0.671877f,
-        0.667969f, 1.0f-0.671889f,
-        1.000023f, 1.0f-0.000013f,
-        0.668104f, 1.0f-0.000013f,
-        0.667979f, 1.0f-0.335851f,
-        0.000059f, 1.0f-0.000004f,
-        0.335973f, 1.0f-0.335903f,
-        0.336098f, 1.0f-0.000071f,
-        0.667979f, 1.0f-0.335851f,
-        0.335973f, 1.0f-0.335903f,
-        0.336024f, 1.0f-0.671877f,
-        1.000004f, 1.0f-0.671847f,
-        0.999958f, 1.0f-0.336064f,
-        0.667979f, 1.0f-0.335851f,
-        0.668104f, 1.0f-0.000013f,
-        0.335973f, 1.0f-0.335903f,
-        0.667979f, 1.0f-0.335851f,
-        0.335973f, 1.0f-0.335903f,
-        0.668104f, 1.0f-0.000013f,
-        0.336098f, 1.0f-0.000071f,
-        0.000103f, 1.0f-0.336048f,
-        0.000004f, 1.0f-0.671870f,
-        0.336024f, 1.0f-0.671877f,
-        0.000103f, 1.0f-0.336048f,
-        0.336024f, 1.0f-0.671877f,
-        0.335973f, 1.0f-0.335903f,
-        0.667969f, 1.0f-0.671889f,
-        1.000004f, 1.0f-0.671847f,
-        0.667979f, 1.0f-0.335851f
+    vec2[] g_uv_buffer_data = [
+        vec2(0.000059f, 1.0f-0.000004f),
+        vec2(0.000103f, 1.0f-0.336048f),
+        vec2(0.335973f, 1.0f-0.335903f),
+        vec2(1.000023f, 1.0f-0.000013f),
+        vec2(0.667979f, 1.0f-0.335851f),
+        vec2(0.999958f, 1.0f-0.336064f),
+        vec2(0.667979f, 1.0f-0.335851f),
+        vec2(0.336024f, 1.0f-0.671877f),
+        vec2(0.667969f, 1.0f-0.671889f),
+        vec2(1.000023f, 1.0f-0.000013f),
+        vec2(0.668104f, 1.0f-0.000013f),
+        vec2(0.667979f, 1.0f-0.335851f),
+        vec2(0.000059f, 1.0f-0.000004f),
+        vec2(0.335973f, 1.0f-0.335903f),
+        vec2(0.336098f, 1.0f-0.000071f),
+        vec2(0.667979f, 1.0f-0.335851f),
+        vec2(0.335973f, 1.0f-0.335903f),
+        vec2(0.336024f, 1.0f-0.671877f),
+        vec2(1.000004f, 1.0f-0.671847f),
+        vec2(0.999958f, 1.0f-0.336064f),
+        vec2(0.667979f, 1.0f-0.335851f),
+        vec2(0.668104f, 1.0f-0.000013f),
+        vec2(0.335973f, 1.0f-0.335903f),
+        vec2(0.667979f, 1.0f-0.335851f),
+        vec2(0.335973f, 1.0f-0.335903f),
+        vec2(0.668104f, 1.0f-0.000013f),
+        vec2(0.336098f, 1.0f-0.000071f),
+        vec2(0.000103f, 1.0f-0.336048f),
+        vec2(0.000004f, 1.0f-0.671870f),
+        vec2(0.336024f, 1.0f-0.671877f),
+        vec2(0.000103f, 1.0f-0.336048f),
+        vec2(0.336024f, 1.0f-0.671877f),
+        vec2(0.335973f, 1.0f-0.335903f),
+        vec2(0.667969f, 1.0f-0.671889f),
+        vec2(1.000004f, 1.0f-0.671847f),
+        vec2(0.667979f, 1.0f-0.335851f)
             ];
 
-    uint vertex_buffer_id = generate_buffer_with_data(vertex_buffer_data);
-    uint g_uv_buffer_id = generate_buffer_with_data(g_uv_buffer_data);
+    auto vertex_buffer = create_buffer!vec3();
+    auto uv_buffer = create_buffer!vec2();
 
-    auto projection = mat4.perspective(1024, 768, 90, 0.1, 100);
-    auto view = mat4.look_at(vec3(3, 2, 2), vec3(0, 0, 0), vec3(0, 1, 0));
-    auto model = mat4.identity;
-    auto mvp = projection * view * model;
+    vertex_buffer.upload(vertex_buffer_data);
+    uv_buffer.upload(g_uv_buffer_data);
 
     auto program_id = load_shaders(vertex_source, fragment_source);
 
@@ -294,31 +300,42 @@ void main()
     auto sampler_uniform = create_uniform!int(program_id, "myTextureSampler");
 
     uint texture_id = load_texture_from_file("box-01.jpg");
+    
+    uint n = 0;
 
     while (!glfwWindowShouldClose(window)) {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+        n += 1;
+
+        auto projection = mat4.perspective(1024, 768, 90, 0.1, 100);
+        auto view = mat4.look_at(vec3(3 - n*0.005, 2+0.0001, 2+n*0.001), vec3(0, 0, 0), vec3(0, 1, 0));
+
+        auto vp = projection * view;
+
+        auto model = mat4.identity;
+        auto mvp = vp * model;
+
         glEnableVertexAttribArray(0);
         glEnableVertexAttribArray(1);
 
-        bind_buffer_to_vertex_attrib_thing(vertex_buffer_id, 3, 0);
-        bind_buffer_to_vertex_attrib_thing(g_uv_buffer_id, 2, 1);
-
-        bind_texture_to_port_thing(texture_id, 0);
-
         glUseProgram(program_id);
 
+        vertex_buffer.bind_to_vertex_attrib(0);
+        uv_buffer.bind_to_vertex_attrib(1);
+
         mvp_uniform.upload(mvp);
+
+        bind_texture_to_port_thing(texture_id, 0);
         sampler_uniform.upload(0);
 
-        glDrawArrays(GL_TRIANGLES, 0, to!int(vertex_buffer_data.length / 3));
+        glDrawArrays(GL_TRIANGLES, 0, vertex_buffer.num_objects);
 
         glDisableVertexAttribArray(1);
         glDisableVertexAttribArray(0);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
-
     }
 }
 
