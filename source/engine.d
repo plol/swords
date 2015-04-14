@@ -2,11 +2,17 @@ import std.stdio;
 import std.string;
 import std.exception;
 import std.conv;
+import std.utf;
+import std.range;
+
+import std.experimental.logger;
 
 import deimos.glfw.glfw3;
 import derelict.opengl3.gl3;
 import gl3n.linalg;
 import imageformats;
+
+import backtrace;
 
 string vertex_source = q{
 
@@ -40,7 +46,8 @@ string fragment_source = q{
     uniform sampler2D myTextureSampler;
 
     void main() {
-        color = texture2D(myTextureSampler, vec2(wat.x, -wat.y)).rgb;
+        //color = texture2D(myTextureSampler, vec2(wat.x, -wat.y)).rgb;
+        color = texture2D(myTextureSampler, UV).rgb;
     }
 };
 
@@ -81,6 +88,8 @@ GLFWwindow* awkward_init() {
     glGenVertexArrays(1, &vertex_array_id);
     glBindVertexArray(vertex_array_id);
     // sorcery over
+
+    backtrace.install(stdout);
 
     return window;
 }
@@ -164,16 +173,21 @@ struct Buffer(T) {
     int num_objects;
 
     void upload(const T[] data) {
+        log(data);
         num_objects = to!int(data.length);
 
         glBindBuffer(GL_ARRAY_BUFFER, id);
+        check_error();
         glBufferData(GL_ARRAY_BUFFER, T.sizeof * data.length, data.ptr,
                 GL_STATIC_DRAW);
+        check_error();
     }
     void bind_to_vertex_attrib(int vertex_attrib) {
         glBindBuffer(GL_ARRAY_BUFFER, id);
         glVertexAttribPointer(vertex_attrib, T.sizeof / float.sizeof, GL_FLOAT,
-                GL_FALSE, 0, null); }
+                GL_FALSE, 0, null);
+        check_error();
+    }
 }
 
 Buffer!T create_buffer(T)() {
@@ -197,3 +211,30 @@ struct Uniform(T) {
 Uniform!T create_uniform(T)(uint program_id, string name) {
     return Uniform!T(glGetUniformLocation(program_id, name.toStringz));
 }
+
+
+bool should_continue(GLFWwindow* window) {
+    return !glfwWindowShouldClose(window);
+}
+
+void swap_buffers(GLFWwindow* window) {
+    check_error();
+    glfwSwapBuffers(window);
+    glfwPollEvents();
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    check_error();
+}
+
+
+bool is_key_pressed(GLFWwindow* window, string key) {
+    if (key.length == 1) {
+        return glfwGetKey(window, key[0]) == GLFW_PRESS;
+    }
+    assert (0);
+}
+
+
+
+
+
+

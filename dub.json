@@ -4,10 +4,13 @@
     "copyright": "Copyright © 2015, plol",
     "authors": ["plol"],
     "debugMode": true,
+    "debugInfo": true,
+    "alwaysStackFrame": true,
     "dependencies": {
         "glfw-drey": "~>0.0.4",
         "derelict-gl3": "~>1.0.12",
         "gl3n": "~>1.0.1",
-        "imageformats": "~>3.0.5"
+        "imageformats": "~>3.0.5",
+        "backtrace-d": "~>0.1.0"
     }
 }
