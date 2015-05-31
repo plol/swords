@@ -7,83 +7,92 @@ import std.experimental.logger;
 
 import gl3n.linalg;
 
-import graphics;
-static import engine;
+import engine;
 
-vec3 calculate_normal(vec3 a, vec3 b, vec3 c) {
-    return cross(b-a, c-a).normalized();
+
+struct ControllerState {
+    Camera camera;
 }
 
-float wonk(float x) {
-    if (x < 0) {
-        return 1;
+struct Camera {
+    vec3 pos;
+    auto angle = quat.zrotation(0);
+    auto speed = 0.3;
+
+    auto look_at_delta() {
+        return angle * vec3(0,14,18);
     }
-    if (x > 0) {
-        return 0;
+    void turn_left(float rads) {
+        angle.rotatey(rads);
     }
-    log(x);
-    assert (0);
-}
-
-
-vec2[] create_uv_data_for_cube(vec3[] cube) {
-    vec2[] ret;
-    foreach (vertex; cube.chunks(3)) {
-        auto v0 = vertex[0];
-        auto v1 = vertex[1];
-        auto v2 = vertex[2];
-        auto n = calculate_normal(v0, v1, v2);
-
-        foreach (v; vertex) {
-            vec2 uv = vec2(0, 0);
-
-            if (n.x != 0) {
-                uv.x = wonk(v.z * -n.x);
-                uv.y = wonk(v.y);
-            }
-            if (n.y != 0) {
-                // 0 is good here
-            }
-            if (n.z != 0) {
-                uv.x = wonk(v.x * n.z);
-                uv.y = wonk(v.y);
-            }
-
-            ret ~= uv;
-        }
+    void turn_right(float rads) {
+        angle.rotatey(-rads);
     }
-    return ret;
-}
 
-
-vec3 as_3d_with_normal(vec2 v, vec3 n) {
-    if (n.x != 0) return vec3(0, v.y, v.x * n.x);
-    if (n.y != 0) return vec3(v.x, 0, v.y);
-    if (n.z != 0) return vec3(v.x * n.z, v.y, 0);
-    assert (0);
-}
-
-vec3[6] square_face(float size, vec3 normal, vec3 centered_at) {
-    auto n = normal.normalized();
-    vec3[6] ret;
-
-    vec2[6] points2d = [
-        vec2(-1, -1), vec2(1, -1), vec2(1, 1),
-        vec2(1, 1), vec2(-1, 1), vec2(-1, -1)
-    ];
-    
-    foreach (i; 0 .. 6) {
-        ret[i] = centered_at + size * points2d[i].as_3d_with_normal(n);
+    void center_on(vec3 target) {
+        pos = target + look_at_delta();
     }
-    return ret;
 }
+
+struct Unit {
+    vec3 pos = vec3(0, 0, 0);
+
+    float speed = 0;
+
+    quat rotation = quat.identity;
+
+    Model model;
+
+    void turn_left(float rads) {
+        rotation.rotatey(rads);
+        model.turn_left(rads);
+    }
+
+    void turn_right(float rads) {
+        rotation.rotatey(-rads);
+        model.turn_right(rads);
+    }
+
+    vec3 forward() {
+        return rotation * vec3(0,0,-1);
+    }
+    vec3 right() {
+        return rotation * vec3(1, 0, 0);
+    }
+
+    void move_right(float distance) {
+        pos += distance * right();
+    }
+
+    void move_left(float distance) {
+        pos -= distance * right();
+    }
+
+    void move_forward(float distance) {
+        pos += distance * forward();
+    }
+
+    void move_backward(float distance) {
+        pos -= distance * forward();
+    }
+}
+
+Unit create_unit(Model model) {
+    uint texture_id = load_texture_from_file("box-01.jpg");
+
+    auto pos = vec3(0, 0, 0);
+
+    return Unit(pos, 0.3, quat.identity, model);
+}
+
+
 void main()
 {
     scope (exit) {
         log("exiting");
     }
 
-    auto window = engine.awkward_init();
+    auto window = create_window();
 
     vec3 origo = vec3(0,0,0);
     vec3 x = vec3(1,0,0);
@@ -94,9 +103,10 @@ void main()
     foreach (v; [x,y,z,-x,-y,-z]) {
         vertex_buffer_data ~= square_face(1, v, v);
     }
+    uint texture_id = load_texture_from_file("box-01.jpg");
 
-    auto vertex_buffer = engine.create_buffer!vec3();
-    auto uv_buffer = engine.create_buffer!vec2();
+    auto vertex_buffer = create_buffer!vec3();
+    auto uv_buffer = create_buffer!vec2();
 
     vertex_buffer.upload(vertex_buffer_data);
     uv_buffer.upload(vertex_buffer_data.create_uv_data_for_cube());
@@ -113,8 +123,8 @@ void main()
 
     auto vertex_buffer_floor_data = square_face(100, y, origo);
 
-    auto vertex_buffer_floor = engine.create_buffer!vec3();
-    auto uv_buffer_floor = engine.create_buffer!vec2();
+    auto vertex_buffer_floor = create_buffer!vec3();
+    auto uv_buffer_floor = create_buffer!vec2();
 
     vertex_buffer_floor.upload(vertex_buffer_floor_data[]);
     uv_buffer_floor.upload(square_face(1, x, origo).create_uv_data_for_cube());
@@ -124,67 +134,62 @@ void main()
     Renderer r;
     r.init();
 
-    uint texture_id = engine.load_texture_from_file("box-01.jpg");
+    ControllerState ctrl;
+    Unit unit = create_unit(Model(vertex_buffer, uv_buffer, origo,
+                quat.identity, 1));
+
 
     auto unit_pos = vec2(0, 0);
     auto camera_angle = quat.zrotation(0);
 
     auto camera_speed = 0.3;
 
-    auto unit_model = Model(vertex_buffer, uv_buffer, origo, quat.identity, 1);
+    auto projection = mat4.perspective(1024, 768, 90, 0.1, 1000);
     
-    while (engine.should_continue(window)) {
+    while (window.should_continue()) {
 
-        if (engine.is_key_pressed(window, "R")) {
-            unit_model.rotation.rotatey(0.05);
+        if (window.is_key_pressed("R")) {
+            unit.turn_left(0.05);
         }
-        if (engine.is_key_pressed(window, "T")) {
-            unit_model.rotation.rotatey(-0.05);
+        if (window.is_key_pressed("T")) {
+            unit.turn_right(0.05);
         }
-        if (engine.is_key_pressed(window, "Q")) {
-            camera_angle.rotatey(0.05);
-            unit_model.rotation.rotatey(0.05);
+        if (window.is_key_pressed("Q")) {
+            ctrl.camera.turn_left(0.05);
+            unit.turn_left(0.05);
         }
-        if (engine.is_key_pressed(window, "E")) {
-            camera_angle.rotatey(-0.05);
-            unit_model.rotation.rotatey(-0.05);
-        }
-
-        auto look_at_delta = camera_angle * vec3(0,-0.2,-1);
-
-        auto right = look_at_delta.cross(y);
-        auto forward = y.cross(right);
-
-        if (engine.is_key_pressed(window, "W")) {
-            unit_pos += camera_speed * forward.xz;
-        }
-        if (engine.is_key_pressed(window, "A")) {
-            unit_pos -= camera_speed * right.xz;
-        }
-        if (engine.is_key_pressed(window, "S")) {
-            unit_pos -= camera_speed * forward.xz;
-        }
-        if (engine.is_key_pressed(window, "D")) {
-            unit_pos += camera_speed * right.xz;
+        if (window.is_key_pressed("E")) {
+            ctrl.camera.turn_right(0.05);
+            unit.turn_right(0.05);
         }
 
-        auto unit_pos_3d = vec3(unit_pos.x, 0, unit_pos.y);
+        if (window.is_key_pressed("W")) {
+            unit.move_forward(unit.speed);
+        }
+        if (window.is_key_pressed("S")) {
+            unit.move_backward(unit.speed);
+        }
+        if (window.is_key_pressed("A")) {
+            unit.move_left(unit.speed);
+        }
+        if (window.is_key_pressed("D")) {
+            unit.move_right(unit.speed);
+        }
 
-        auto camera_pos = unit_pos_3d - 10*look_at_delta + 5*y;
+        ctrl.camera.center_on(unit.pos);
 
-        auto projection = mat4.perspective(1024, 768, 90, 0.1, 1000);
-        auto view = mat4.look_at(camera_pos, unit_pos_3d, y);
+        auto view = mat4.look_at(ctrl.camera.pos, unit.pos, y);
 
         auto vp = projection * view;
 
         foreach (model; models) {
             r.render(vp, model, 0, texture_id);
         }
-        unit_model.pos = unit_pos_3d;
+        unit.model.pos = unit.pos;
 
-        r.render(vp, unit_model, 0, texture_id);
+        r.render(vp, unit.model, 0, texture_id);
 
-        engine.swap_buffers(window);
+        window.swap_buffers();
     }
 }
 

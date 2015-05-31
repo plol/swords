@@ -1,3 +1,5 @@
+module engine.graphics;
+
 import std.stdio;
 import std.string;
 import std.exception;
@@ -11,88 +13,13 @@ import deimos.glfw.glfw3;
 import derelict.opengl3.gl3;
 import gl3n.linalg;
 import imageformats;
-
 import backtrace;
 
-string vertex_source = q{
+import deimos.glfw.glfw3;
+import derelict.opengl3.gl3;
+import gl3n.linalg;
 
-    #version 330 core
-
-    in vec3 pos;
-    in vec2 UV_in;
-
-    uniform mat4 mvp;
-
-    out vec3 wat;
-    out vec2 UV;
-
-    void main() {
-        vec4 v = vec4(pos, 1);
-        gl_Position = mvp * v;
-        wat = (pos + vec3(1,1,1)) / 2;
-        UV = UV_in;
-    }
-};
-
-
-string fragment_source = q{
-
-    #version 330 core
-
-    out vec3 color;
-    in vec3 wat;
-    in vec2 UV;
-
-    uniform sampler2D myTextureSampler;
-
-    void main() {
-        //color = texture2D(myTextureSampler, vec2(wat.x, -wat.y)).rgb;
-        color = texture2D(myTextureSampler, UV).rgb;
-    }
-};
-
-__gshared float max_anisotropic;
-
-GLFWwindow* awkward_init() {
-
-    if (!glfwInit()) {
-        assert (0);
-    }
-
-    DerelictGL3.load();
-
-
-    glfwWindowHint(GLFW_SAMPLES, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_RESIZABLE, false);
-
-    auto window = glfwCreateWindow(1024, 768, "Heh!", null, null);
-
-    if (window is null) {
-        assert (0);
-    }
-    glfwMakeContextCurrent(window);
-    glfwSetInputMode(window, GLFW_STICKY_KEYS, true);
-
-    DerelictGL3.reload();
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
-
-    glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &max_anisotropic);
-
-    // sorcery:
-    uint vertex_array_id;
-    glGenVertexArrays(1, &vertex_array_id);
-    glBindVertexArray(vertex_array_id);
-    // sorcery over
-
-    backtrace.install(stdout);
-
-    return window;
-}
+import engine;
 
 void check_stuff(alias get, alias get_info_log, uint status_param)(uint id) {
     int successful = 0;
@@ -173,7 +100,6 @@ struct Buffer(T) {
     int num_objects;
 
     void upload(const T[] data) {
-        log(data);
         num_objects = to!int(data.length);
 
         glBindBuffer(GL_ARRAY_BUFFER, id);
@@ -213,28 +139,106 @@ Uniform!T create_uniform(T)(uint program_id, string name) {
 }
 
 
-bool should_continue(GLFWwindow* window) {
-    return !glfwWindowShouldClose(window);
-}
+string vertex_source = q{
 
-void swap_buffers(GLFWwindow* window) {
-    check_error();
-    glfwSwapBuffers(window);
-    glfwPollEvents();
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    check_error();
-}
+    #version 330 core
 
+    in vec3 pos;
+    in vec2 UV_in;
 
-bool is_key_pressed(GLFWwindow* window, string key) {
-    if (key.length == 1) {
-        return glfwGetKey(window, key[0]) == GLFW_PRESS;
+    uniform mat4 mvp;
+
+    out vec3 wat;
+    out vec2 UV;
+
+    void main() {
+        vec4 v = vec4(pos, 1);
+        gl_Position = mvp * v;
+        wat = (pos + vec3(1,1,1)) / 2;
+        UV = UV_in;
     }
-    assert (0);
+};
+
+
+string fragment_source = q{
+
+    #version 330 core
+
+    out vec3 color;
+    in vec3 wat;
+    in vec2 UV;
+
+    uniform sampler2D myTextureSampler;
+
+    void main() {
+        //color = texture2D(myTextureSampler, vec2(wat.x, -wat.y)).rgb;
+        color = texture2D(myTextureSampler, UV).rgb;
+    }
+};
+
+__gshared float max_anisotropic;
+
+struct Model {
+    Buffer!vec3 vertex_buffer;
+    Buffer!vec2 uv_buffer;
+
+    vec3 pos = vec3(0, 0, 0);
+    quat rotation = quat.identity;
+    float scaling = 1;
+
+    void turn_left(float rads) {
+        rotation.rotatey(rads);
+    }
+    void turn_right(float rads) {
+        rotation.rotatey(-rads);
+    }
+}
+
+struct Scene {
+
+    Model[] models;
+
 }
 
 
+struct Renderer {
+
+    uint program_id;
+    Uniform!mat4 mvp_uniform;
+    Uniform!int sampler_uniform;
+
+    void init() {
+        program_id = load_shaders(vertex_source, fragment_source);
+
+        mvp_uniform = create_uniform!mat4(program_id, "mvp");
+        sampler_uniform = create_uniform!int(program_id, "myTextureSampler");
+    }
 
 
+    void render(mat4 vp, Model model, int n, uint texture_id) {
+        auto m = mat4.translation(model.pos.x, model.pos.y, model.pos.z)
+            * model.rotation.to_matrix!(4,4)()
+            * mat4.scaling(model.scaling, model.scaling, model.scaling);
+        auto mvp = vp * m;
 
+        glEnableVertexAttribArray(0);
+        glEnableVertexAttribArray(1);
+
+        glUseProgram(program_id);
+
+        model.vertex_buffer.bind_to_vertex_attrib(0);
+        model.uv_buffer.bind_to_vertex_attrib(1);
+
+        mvp_uniform.upload(mvp);
+
+        bind_texture_to_port_thing(texture_id, 0);
+        sampler_uniform.upload(0);
+
+        glDrawArrays(GL_TRIANGLES, 0, model.vertex_buffer.num_objects);
+
+        glDisableVertexAttribArray(1);
+        glDisableVertexAttribArray(0);
+    }
+
+}
 
