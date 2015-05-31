@@ -2,13 +2,18 @@ import std.string;
 import std.exception;
 import std.conv;
 import std.range;
+import core.thread;
 
 import std.experimental.logger;
 
 import gl3n.linalg;
 
-import engine;
+static import asynchronous;
 
+import engine;
+import networking;
+import thread_management;
+import server;
 
 struct ControllerState {
     Camera camera;
@@ -139,14 +144,32 @@ void main()
                 quat.identity, 1));
 
 
-    auto unit_pos = vec2(0, 0);
-    auto camera_angle = quat.zrotation(0);
+    ClientConnection t1, t2;
 
-    auto camera_speed = 0.3;
+    auto server = spawn_thread!(Server, (asynchronous.EventLoop loop) => new Server(loop))();
+
+    scope (exit) {
+        server.kill();
+    }
+
+    @(asynchronous.Coroutine)
+    void create_connections(asynchronous.EventLoop loop) {
+        auto client1 = loop.createConnection(() => new ClientConnection("client1"), "localhost", "12345");
+        auto client2 = loop.createConnection(() => new ClientConnection("client2"), "localhost", "12345");
+
+        t1 = cast(ClientConnection)client1.protocol;
+        t2 = cast(ClientConnection)client2.protocol;
+    }
+
+    auto loop = asynchronous.getEventLoop();
+
+    loop.runUntilComplete(loop.createTask(() => create_connections(loop)));
 
     auto projection = mat4.perspective(1024, 768, 90, 0.1, 1000);
     
     while (window.should_continue()) {
+        loop.callLater(dur!"msecs"(10), () => loop.stop());
+        loop.runForever();
 
         if (window.is_key_pressed("R")) {
             unit.turn_left(0.05);

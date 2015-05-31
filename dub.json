@@ -11,6 +11,7 @@
         "derelict-gl3": "~>1.0.12",
         "gl3n": "~>1.0.1",
         "imageformats": "~>3.0.5",
-        "backtrace-d": "~>0.1.0"
+        "backtrace-d": "~>0.1.0",
+        "asynchronous": "~>0.3.1"
     }
 }
