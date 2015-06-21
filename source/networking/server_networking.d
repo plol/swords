@@ -5,18 +5,20 @@ import std.string;
 
 import networking.internals;
 
+import async_stuff;
 
-class ServerConnection : BasicConnection {
+
+class ServerConnection : MessageConnection {
     size_t index;
     void delegate(size_t, const(void)[]) callback;
 
-    this(size_t connection_index, void delegate(size_t, const(void)[]) data_received_cb) {
-        super("ServerConnection with index %s".format(connection_index));
+    this(TcpConnection connection, size_t connection_index, void delegate(size_t, const(void)[]) on_message) {
+        super("ServerConnection with index %s".format(connection_index), connection);
         index = connection_index;
-        callback = data_received_cb;
+        callback = on_message;
     }
 
-    override void messageReceived(const(void)[] data) {
+    override void on_message(const(void)[] data) {
         callback(index, data);
     }
 }
@@ -24,14 +26,22 @@ class ServerConnection : BasicConnection {
 struct ServerNetworking {
 
     ServerConnection[] server_connections;
+    TcpServer listener;
 
-    void delegate(size_t, const(void)[]) data_received;
+    void delegate(size_t, const(void)[]) on_message;
 
-    asynchronous.Protocol make_server_connection() {
+    void initialize(void delegate(size_t, const(void)[]) on_message) {
+        this.on_message = on_message;
+        listener = new TcpServer;
+
+        listener.on_connect = &on_connect;
+        listener.listen_on("localhost", 12345);
+    }
+
+    void on_connect(TcpConnection conn) {
         auto connection_index = server_connections.length;
-        auto sc = new ServerConnection(connection_index, data_received);
+        auto sc = new ServerConnection(conn, connection_index, on_message);
         server_connections ~= sc;
-        return sc;
     }
 
     void send_to(size_t index, const(void)[] data) {

@@ -4,12 +4,12 @@ import std.experimental.logger;
 import std.algorithm;
 import std.conv;
 
-static import asynchronous;
+public import async_stuff;
 
-struct MessageBuffer {
-    void[] buffer;
+class MessageBuffer {
+    ubyte[] buffer;
 
-    void add_data(const void[] data) {
+    void add_data(const ubyte[] data) {
         buffer ~= data;
     }
 
@@ -20,70 +20,55 @@ struct MessageBuffer {
         return (cast(uint[])(buffer[0 .. uint.sizeof]))[0] + cast(uint)uint.sizeof;
     }
 
-    inout(void)[] front() @property inout {
+    inout(ubyte)[] front() @property inout {
         return buffer[uint.sizeof .. next_msg_length()];
     }
     void popFront() {
         auto len = next_msg_length();
-        buffer[0 .. $ - len][] = buffer[len .. $];
+        copy(buffer[len .. $], buffer[0 .. $-len]);
         buffer.length -= len;
         buffer.assumeSafeAppend();
-        log(buffer.length);
     }
     bool empty() const {
         return next_msg_length() > buffer.length;
     }
 }
 
-class BasicConnection : asynchronous.Protocol {
-    asynchronous.Transport transport;
+class MessageConnection {
     string name;
     MessageBuffer buffer;
 
-    this(string connection_name) {
+    TcpConnection connection;
+
+    this(string connection_name, TcpConnection tcp_connection) {
         name = connection_name;
+        buffer = new MessageBuffer;
+        connection = tcp_connection;
+        tcp_connection.on_read = &on_data;
     }
 
     void write(const(void)[] data) {
         uint len = to!uint(data.length);
-        transport.write((&len)[0..1]);
-        transport.write(data);
+        auto msg_length = uint.sizeof + len;
+
+        auto write_buffer = new ubyte[](msg_length);
+
+        write_buffer[0 .. uint.sizeof][] = cast(ubyte[])((&len)[0..1])[];
+        write_buffer[uint.sizeof .. msg_length][] = cast(ubyte[])data[];
+
+        log(name, " sending ", len, " ", msg_length, " ", write_buffer);
+        connection.write(write_buffer[0 .. msg_length]);
     }
 
-    void connectionMade(asynchronous.BaseTransport base) {
-        transport = cast(typeof(transport)) base; // wtf?
-        log(name, " connectionMade");
-    }
-
-    void connectionLost(Exception exception) {
-        log(name, " connectionLost");
-    }
-
-    void pauseWriting() {
-        log(name, " pauseWriting");
-    }
-
-    void resumeWriting() {
-        log(name, " resumeWriting");
-    }
-
-    void dataReceived(const(void)[] data) {
-        log(name, " dataReceived ", data.length);
-
+    void on_data(const(ubyte)[] data) {
         buffer.add_data(data);
         foreach (msg; buffer) {
-            messageReceived(msg);
+            on_message(msg);
         }
     }
 
-    void messageReceived(const(void)[] data) {
-        log(name, " messageReceived: ", cast(string)data);
-    }
-
-
-    bool eofReceived() {
-        log(name, " eofReceived");
-        return false;
+    void on_message(const(void)[] data) {
+        log(name, " on_message: ", cast(string)data);
     }
 }
 

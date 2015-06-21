@@ -8,12 +8,12 @@ import std.experimental.logger;
 
 import gl3n.linalg;
 
-static import asynchronous;
-
 import engine;
 import networking;
 import thread_management;
 import server;
+
+import async_stuff;
 
 struct ControllerState {
     Camera camera;
@@ -144,32 +144,25 @@ void main()
                 quat.identity, 1));
 
 
-    ClientConnection t1, t2;
+    auto server = spawn_thread!(Server, () => new Server)();
 
-    auto server = spawn_thread!(Server, (asynchronous.EventLoop loop) => new Server(loop))();
+    Thread.sleep(1.seconds);
 
     scope (exit) {
         server.kill();
     }
 
-    @(asynchronous.Coroutine)
-    void create_connections(asynchronous.EventLoop loop) {
-        auto client1 = loop.createConnection(() => new ClientConnection("client1"), "localhost", "12345");
-        auto client2 = loop.createConnection(() => new ClientConnection("client2"), "localhost", "12345");
+    auto client_connection = connect_to_server("localhost", 12345);
 
-        t1 = cast(ClientConnection)client1.protocol;
-        t2 = cast(ClientConnection)client2.protocol;
-    }
-
-    auto loop = asynchronous.getEventLoop();
-
-    loop.runUntilComplete(loop.createTask(() => create_connections(loop)));
+    client_connection.frame = () {
+        client_connection.write("FRAME OK!");
+    };
 
     auto projection = mat4.perspective(1024, 768, 90, 0.1, 1000);
     
     while (window.should_continue()) {
-        loop.callLater(dur!"msecs"(10), () => loop.stop());
-        loop.runForever();
+        call_soon(10.msecs, () => stop_event_loop());
+        run_event_loop_forever();
 
         if (window.is_key_pressed("R")) {
             unit.turn_left(0.05);

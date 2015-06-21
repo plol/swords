@@ -5,7 +5,7 @@ import std.experimental.logger;
 
 import std.concurrency;
 
-static import asynchronous;
+import async_stuff;
 
 private struct TimeToDie {}
 private struct StartupReady(T) {}
@@ -28,23 +28,13 @@ Controller!T spawn_thread(T, alias factory)() {
     return ret;
 }
 
-void call_every(alias duration, alias f)(asynchronous.EventLoop loop) {
-    void bounce() {
-        f();
-        loop.callLater(duration, &bounce);
-    }
-    bounce();
-}
-
 void run(T, alias factory)(Tid tid) {
-    auto loop = asynchronous.getEventLoop();
-    auto runner = factory(loop);
-
-    call_every!(10.msecs, () => receiveTimeout(0.seconds, 
-                (TimeToDie ttd) => loop.stop(),
-                (string s) { log("got string ", s); }
-                ))(loop);
-
+    auto runner = factory();
+    call_every(10.msecs,
+            () { receiveTimeout(0.seconds, 
+                                 (TimeToDie ttd) => stop_event_loop(),
+                                 (string s) { log("got string ", s); }
+                                ); });
     tid.send(StartupReady!T());
-    loop.runForever();
+    run_event_loop_forever();
 }
