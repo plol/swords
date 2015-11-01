@@ -91,8 +91,7 @@ Unit create_unit(Model model) {
 }
 
 
-void main()
-{
+void main() {
     scope (exit) {
         log("exiting");
     }
