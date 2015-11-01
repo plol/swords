@@ -182,9 +182,28 @@ struct Model {
     Buffer!vec3 vertex_buffer;
     Buffer!vec2 uv_buffer;
 
-    vec3 pos = vec3(0, 0, 0);
-    quat rotation = quat.identity;
-    float scaling = 1;
+    vec3 pos;
+    quat rotation;
+    vec3 scaling;
+
+    @disable this();
+
+    this(Buffer!vec3 vertex_buffer, Buffer!vec2 uv_buffer, vec3 pos, quat
+            rotation, vec3 scaling) {
+        this.vertex_buffer = vertex_buffer;
+        this.uv_buffer = uv_buffer;
+        this.pos = pos;
+        this.rotation = rotation;
+        this.scaling = scaling;
+    }
+
+    this(Buffer!vec3 vertex_buffer, Buffer!vec2 uv_buffer, vec3 pos, quat rotation, float scaling) {
+        this.vertex_buffer = vertex_buffer;
+        this.uv_buffer = uv_buffer;
+        this.pos = pos;
+        this.rotation = rotation;
+        this.scaling = vec3(scaling, scaling, scaling);
+    }
 
     void turn_left(float rads) {
         rotation.rotatey(rads);
@@ -218,7 +237,7 @@ struct Renderer {
     void render(mat4 vp, Model model, int n, uint texture_id) {
         auto m = mat4.translation(model.pos.x, model.pos.y, model.pos.z)
             * model.rotation.to_matrix!(4,4)()
-            * mat4.scaling(model.scaling, model.scaling, model.scaling);
+            * mat4.scaling(model.scaling.x, model.scaling.y, model.scaling.z);
         auto mvp = vp * m;
 
         glEnableVertexAttribArray(0);
