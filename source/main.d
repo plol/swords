@@ -143,6 +143,13 @@ void main() {
 
     Model[] models;
 
+    struct Box {
+        Model model;
+        int time_left;
+    }
+
+    Box[] boxes;
+
     auto vertex_buffer_floor_data = square_face(100, y, origo);
 
     auto vertex_buffer_floor = create_buffer!vec3();
@@ -222,6 +229,15 @@ void main() {
     client_connection.on_command = (cmds) {
         if (cmds.frame_update.exists()) {
             send_frame_ok_pls = true;
+
+            Box[] new_boxes;
+            foreach (box; boxes) {
+                box.time_left -= 1;
+                if (box.time_left > 0) {
+                    new_boxes ~= box;
+                }
+            }
+            boxes = new_boxes;
         }
         foreach (action; cmds.unit_actions) {
             auto target = vec3(0, 0, 0);
@@ -229,6 +245,18 @@ void main() {
             target.z = action.to.y;
 
             unit.desired_pos = target;
+        }
+
+        foreach (box; cmds.debug_boxes) {
+            float x = box.low.x + 0.1;
+            float y = box.low.y + 0.1;
+            float scaling_x = box.high.x - box.low.x + 0.8;
+            float scaling_y = box.high.y - box.low.y + 0.8;
+            boxes ~= Box(
+                    Model(vertex_buffer, uv_buffer,
+                        vec3(x, 0.8 + box.altitude, y), quat.identity,
+                        vec3(scaling_x, 0.8, scaling_y)),
+                    box.duration_in_ticks);
         }
     };
 
@@ -291,6 +319,14 @@ void main() {
         foreach (model; models) {
             r.render(vp, model, 0, texture_id);
         }
+
+
+        foreach (box; boxes) {
+            r.render(vp, box.model, 0, texture_id);
+        }
+
+
+
         unit.model.pos = unit.pos;
 
         r.render(vp, unit.model, 0, texture_id);
