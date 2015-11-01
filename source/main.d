@@ -117,14 +117,6 @@ void main() {
 
     Model[] models;
 
-    models ~= Model(vertex_buffer, uv_buffer, vec3(0,0,0), quat.identity, 10);
-    models ~= Model(vertex_buffer, uv_buffer, vec3(30,0,0), quat.identity, 10);
-    models ~= Model(vertex_buffer, uv_buffer, vec3(0,30,0), quat.identity, 10);
-    models ~= Model(vertex_buffer, uv_buffer, vec3(0,0,30), quat.identity, 10);
-    models ~= Model(vertex_buffer, uv_buffer, vec3(-30,0,0), quat.identity, 10);
-    models ~= Model(vertex_buffer, uv_buffer, vec3(0,-30,0), quat.identity, 10);
-    models ~= Model(vertex_buffer, uv_buffer, vec3(0,0,-30), quat.identity, 10);
-
     auto vertex_buffer_floor_data = square_face(100, y, origo);
 
     auto vertex_buffer_floor = create_buffer!vec3();
