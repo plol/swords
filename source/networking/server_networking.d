@@ -10,15 +10,16 @@ import async_stuff;
 
 class ServerConnection : MessageConnection {
     size_t index;
-    void delegate(size_t, const(void)[]) callback;
+    void delegate(size_t, const(ubyte)[]) callback;
 
-    this(TcpConnection connection, size_t connection_index, void delegate(size_t, const(void)[]) on_message) {
+    this(TcpConnection connection, size_t connection_index,
+            void delegate(size_t, const(ubyte)[]) on_message) {
         super("ServerConnection with index %s".format(connection_index), connection);
         index = connection_index;
         callback = on_message;
     }
 
-    override void on_message(const(void)[] data) {
+    override void on_message(const(ubyte)[] data) {
         callback(index, data);
     }
 }
@@ -28,9 +29,9 @@ struct ServerNetworking {
     ServerConnection[] server_connections;
     TcpServer listener;
 
-    void delegate(size_t, const(void)[]) on_message;
+    void delegate(size_t, const(ubyte)[]) on_message;
 
-    void initialize(void delegate(size_t, const(void)[]) on_message) {
+    void initialize(void delegate(size_t, const(ubyte)[]) on_message) {
         this.on_message = on_message;
         listener = new TcpServer;
 
@@ -44,11 +45,11 @@ struct ServerNetworking {
         server_connections ~= sc;
     }
 
-    void send_to(size_t index, const(void)[] data) {
+    void send_to(size_t index, const(ubyte)[] data) {
         server_connections[index].write(data);
     }
 
-    void broadcast(const(void)[] data) {
+    void broadcast(const(ubyte)[] data) {
         foreach (c; server_connections) {
             c.write(data);
         }

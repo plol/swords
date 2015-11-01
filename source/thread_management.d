@@ -30,11 +30,12 @@ Controller!T spawn_thread(T, alias factory)() {
 
 void run(T, alias factory)(Tid tid) {
     auto runner = factory();
-    call_every(10.msecs,
-            () { receiveTimeout(0.seconds, 
-                                 (TimeToDie ttd) => stop_event_loop(),
-                                 (string s) { log("got string ", s); }
-                                ); });
+    call_every(10.msecs, () {
+            receiveTimeout(0.seconds, 
+                    (TimeToDie ttd) => stop_event_loop(),
+                    (string s) { log("got string ", s); }
+                    );
+            });
     tid.send(StartupReady!T());
     run_event_loop_forever();
 }

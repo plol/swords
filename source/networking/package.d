@@ -1,34 +1,38 @@
 module networking;
 
+import std.string, std.range;
 import std.experimental.logger;
 
 import networking.internals;
 
+import networking.protocol;
 
 public import networking.server_connection;
 
 class ClientConnection : MessageConnection {
 
-    void delegate() frame;
+    void delegate(StateDelta) on_command;
     
-    this(string server, size_t port) {
-        super("client", new TcpConnection(server, port));
+    this(TcpConnection conn) {
+        super("client", conn);
 
-        frame = (){};
+        on_command = (string){};
     }
 
     override
-    void on_message(const(void)[] data) {
-        if (cast(string) data == "FRAME!") {
-            frame();
-        } else {
-            log(name, " messageReceived: ", cast(string)data);
-        }
+    void on_message(const(ubyte)[] data) {
+        on_command(StateDelta(data));
+    }
+
+    void write_commands(UplinkCommands cmds) {
+        write(cmds.serialize());
     }
 }
 
 ClientConnection connect_to_server(string server, size_t port) {
-    auto client = new ClientConnection(server, port);
+    auto client = new ClientConnection(new TcpConnection(server, port));
 
     return client;
 }
+
+

@@ -47,7 +47,7 @@ class MessageConnection {
         tcp_connection.on_read = &on_data;
     }
 
-    void write(const(void)[] data) {
+    void write(const(ubyte)[] data) {
         uint len = to!uint(data.length);
         auto msg_length = uint.sizeof + len;
 
@@ -56,7 +56,7 @@ class MessageConnection {
         write_buffer[0 .. uint.sizeof][] = cast(ubyte[])((&len)[0..1])[];
         write_buffer[uint.sizeof .. msg_length][] = cast(ubyte[])data[];
 
-        log(name, " sending ", len, " ", msg_length, " ", write_buffer);
+        //log(name, " sending ", len, " ", msg_length, " ", write_buffer);
         connection.write(write_buffer[0 .. msg_length]);
     }
 
@@ -67,7 +67,7 @@ class MessageConnection {
         }
     }
 
-    void on_message(const(void)[] data) {
+    void on_message(const(ubyte)[] data) {
         log(name, " on_message: ", cast(string)data);
     }
 }

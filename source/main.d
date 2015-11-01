@@ -3,6 +3,7 @@ import std.exception;
 import std.conv;
 import std.range;
 import core.thread;
+import core.time;
 
 import std.experimental.logger;
 
@@ -10,10 +11,27 @@ import gl3n.linalg;
 
 import engine;
 import networking;
+import protocol = networking.protocol;
 import thread_management;
 import server;
 
 import async_stuff;
+
+
+void move_towards(ref vec3 move_this, vec3 towards_this, double with_this_speed) {
+    auto delta = towards_this - move_this;
+    if (delta.length <= with_this_speed) {
+        move_this = towards_this;
+    } else {
+        move_this += with_this_speed * delta.normalized;
+    }
+}
+void move_towards_adaptive(ref vec3 move_this, vec3 towards_this,
+        double with_this_speed, double adaptive_factor) {
+    auto delta = towards_this - move_this;
+    auto adaptive_speed = with_this_speed + adaptive_factor * delta.length;
+    move_towards(move_this, towards_this, adaptive_speed);
+}
 
 struct ControllerState {
     Camera camera;
@@ -22,10 +40,10 @@ struct ControllerState {
 struct Camera {
     vec3 pos;
     auto angle = quat.zrotation(0);
-    auto speed = 0.3;
+    auto speed = 10;
 
     auto look_at_delta() {
-        return angle * vec3(0,14,18);
+        return angle * vec3(0,7,9);
     }
     void turn_left(float rads) {
         angle.rotatey(rads);
@@ -37,10 +55,14 @@ struct Camera {
     void center_on(vec3 target) {
         pos = target + look_at_delta();
     }
+    void gradual_center_on(vec3 target, double dt) {
+        pos.move_towards_adaptive(target + look_at_delta(), speed * dt, 2*dt);
+    }
 }
 
 struct Unit {
     vec3 pos = vec3(0, 0, 0);
+    vec3 desired_pos = vec3(0, 0, 0);
 
     float speed = 0;
 
@@ -66,19 +88,23 @@ struct Unit {
     }
 
     void move_right(float distance) {
-        pos += distance * right();
+        desired_pos += distance * right();
     }
 
     void move_left(float distance) {
-        pos -= distance * right();
+        desired_pos -= distance * right();
     }
 
     void move_forward(float distance) {
-        pos += distance * forward();
+        desired_pos += distance * forward();
     }
 
     void move_backward(float distance) {
-        pos -= distance * forward();
+        desired_pos -= distance * forward();
+    }
+
+    void move_towards_desired_pos(double dt) {
+        pos.move_towards(desired_pos, speed*dt);
     }
 }
 
@@ -87,7 +113,7 @@ Unit create_unit(Model model) {
 
     auto pos = vec3(0, 0, 0);
 
-    return Unit(pos, 0.3, quat.identity, model);
+    return Unit(pos, pos, 6, quat.identity, model);
 }
 
 
@@ -135,6 +161,8 @@ void main() {
                 quat.identity, 1));
 
 
+    ctrl.camera.center_on(unit.pos);
+
     auto server = spawn_thread!(Server, () => new Server)();
 
     Thread.sleep(1.seconds);
@@ -145,45 +173,116 @@ void main() {
 
     auto client_connection = connect_to_server("localhost", 12345);
 
-    client_connection.frame = () {
-        client_connection.write("FRAME OK!");
+    bool send_frame_ok_pls;
+
+    void send_commands_to_server() {
+
+        protocol.UnitMoveCommand move;
+
+        if (window.is_key_pressed("R")) {
+        }
+        if (window.is_key_pressed("T")) {
+        }
+        if (window.is_key_pressed("Q")) {
+            move.turn = protocol.UnitMoveCommand.LeftRightMotion.LEFT;
+        }
+        if (window.is_key_pressed("E")) {
+            move.turn = protocol.UnitMoveCommand.LeftRightMotion.RIGHT;
+        }
+
+        if (window.is_key_pressed("W")) {
+            move.forward = protocol.UnitMoveCommand.ForwardMotion.FORWARD;
+        }
+        if (window.is_key_pressed("S")) {
+            move.forward = protocol.UnitMoveCommand.ForwardMotion.BACKWARD;
+        }
+        if (window.is_key_pressed("A")) {
+            move.strafe = protocol.UnitMoveCommand.LeftRightMotion.LEFT;
+        }
+        if (window.is_key_pressed("D")) {
+            move.strafe = protocol.UnitMoveCommand.LeftRightMotion.RIGHT;
+        }
+        protocol.UnitCommand command;
+
+        command.unit_id = 1;//HACK
+
+        if (move.turn.exists() || move.forward.exists() || move.strafe.exists()) {
+            command.move = move;
+        }
+
+        protocol.UplinkCommands cmds;
+        cmds.unit_actions ~= command;
+
+        if (send_frame_ok_pls) {
+            cmds.frame_ok = protocol.Frame();
+            send_frame_ok_pls = false;
+        }
+        client_connection.write_commands(cmds);
+    }
+    client_connection.on_command = (cmds) {
+        if (cmds.frame_update.exists()) {
+            send_frame_ok_pls = true;
+        }
+        foreach (action; cmds.unit_actions) {
+            auto target = vec3(0, 0, 0);
+            target.x = action.to.x;
+            target.z = action.to.y;
+
+            unit.desired_pos = target;
+        }
     };
 
     auto projection = mat4.perspective(1024, 768, 90, 0.1, 1000);
     
+    call_every(16.msecs, () => stop_event_loop());
+    call_every(32.msecs, () => send_commands_to_server());
+
+
+    struct FrameTimeCounterThing {
+        MonoTime last_frame_time;
+        MonoTime fps_timer;
+        int frames_this_second;
+        int fps;
+
+        void init() {
+
+            last_frame_time = MonoTime.currTime;
+            fps_timer = MonoTime.currTime;
+        }
+
+        double frame() {
+            auto now = MonoTime.currTime;
+            auto delta_time = now - last_frame_time;
+            last_frame_time = now;
+
+            update_fps(now);
+
+            return delta_time.total!"hnsecs" / 10_000_000.0;
+        }
+
+        void update_fps(MonoTime now) {
+            frames_this_second += 1;
+            if (now - fps_timer >= 1.seconds) {
+                fps = frames_this_second;
+                frames_this_second = 0;
+                fps_timer = now;
+            }
+        }
+    }
+
+    FrameTimeCounterThing timekeeper;
+
+    timekeeper.init();
+
     while (window.should_continue()) {
-        call_soon(10.msecs, () => stop_event_loop());
-        run_event_loop_forever();
+        run_event_loop_forever(); // This gets stopped by the call_every a
+                                  // coupleof lines above
 
-        if (window.is_key_pressed("R")) {
-            unit.turn_left(0.05);
-        }
-        if (window.is_key_pressed("T")) {
-            unit.turn_right(0.05);
-        }
-        if (window.is_key_pressed("Q")) {
-            ctrl.camera.turn_left(0.05);
-            unit.turn_left(0.05);
-        }
-        if (window.is_key_pressed("E")) {
-            ctrl.camera.turn_right(0.05);
-            unit.turn_right(0.05);
-        }
+        auto dt = timekeeper.frame();
 
-        if (window.is_key_pressed("W")) {
-            unit.move_forward(unit.speed);
-        }
-        if (window.is_key_pressed("S")) {
-            unit.move_backward(unit.speed);
-        }
-        if (window.is_key_pressed("A")) {
-            unit.move_left(unit.speed);
-        }
-        if (window.is_key_pressed("D")) {
-            unit.move_right(unit.speed);
-        }
 
-        ctrl.camera.center_on(unit.pos);
+        unit.move_towards_desired_pos(dt);
+        ctrl.camera.gradual_center_on(unit.pos, dt);
 
         auto view = mat4.look_at(ctrl.camera.pos, unit.pos, y);
 
